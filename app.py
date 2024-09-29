@@ -1,4 +1,6 @@
 from flask import Flask, request, jsonify
+from github import Github
+from github import Auth
 import anthropic
 import dotenv
 import os
@@ -6,6 +8,8 @@ import os
 dotenv.load_dotenv()
 app = Flask(__name__)
 api_key = os.getenv("ANTHROPIC_API_KEY")
+username = os.getenv("GITHUB_USERNAME")
+password = os.getenv("GITHUB_PASSWORD")
 
 client = anthropic.Anthropic(
     api_key=api_key,
@@ -25,10 +29,10 @@ def call_claude_api(prompt):
         return {"error": f"Failed to call Claude API: {str(e)}"}
 
 # Phase 1 - Generate Technical Requirements
-@app.route('/phase-one', methods=['POST'])
+@app.route('/phase-1', methods=['POST'])
 def phase_one():
     data = request.json
-    business_requirements = data.get('business_requirements')
+    business_requirements = data.get('data')
     if not business_requirements:
         return jsonify({"error": "Business requirements are missing"}), 400
     assistant = '''
@@ -62,17 +66,17 @@ Risk: Ensuring consistent user experience across all device types may require ad
 [Continue with more technical requirements...]
 
 Remember to consider scalability, security, performance, and maintainability in your technical requirements. If any business requirement is unclear or seems unfeasible, note it for further clarification from the user.
-FORMAT: Markdown
+Format the output in Markdown with clear headings and bullet points for easy readability.
 '''
     prompt = f"{assistant} Given these business requirements: {business_requirements}\nGenerate detailed technical requirements."
     result = call_claude_api(prompt)
     return jsonify({"technical_requirements": result})
 
 # Phase 2 - Create Roadmap
-@app.route('/phase-two', methods=['POST'])
+@app.route('/phase-2', methods=['POST'])
 def phase_two():
     data = request.json
-    technical_requirements = data.get('technical_requirements')
+    technical_requirements = data.get('data')
     if not technical_requirements:
         return jsonify({"error": "Technical requirements are missing"}), 400
     assistant = '''
@@ -119,21 +123,21 @@ Output format:
    - Estimate resource requirements for each sprint
 
 Remember to balance the roadmap between delivering quick wins and tackling complex, high-value features. Also, leave some flexibility in the later sprints to accommodate potential changes or newly discovered requirements.
-FORMAT: Markdown
+Format the output in Markdown with clear headings and bullet points for easy readability.
     '''
     prompt = f"{assistant} Based on these technical requirements: {technical_requirements}\nCreate a detailed project roadmap."
     result = call_claude_api(prompt)
     return jsonify({"roadmap": result})
 
 # Phase 3 - Generate Tasks, Story Points, Acceptance Criteria
-@app.route('/phase-three', methods=['POST'])
+@app.route('/phase-3', methods=['POST'])
 def phase_three():
     data = request.json
-    roadmap = data.get('roadmap')
+    roadmap = data.get('data')
     if not roadmap:
         return jsonify({"error": "Roadmap is missing"}), 400
     assistant = '''
-    You are an Agile coach and expert in breaking down project roadmaps into actionable user stories and tasks. Your role is to take the project roadmap and create detailed, well-structured user stories and tasks that development teams can immediately work on.
+    You are an Agile coach and expert in breaking down project roadmaps into actionable user stories and tasks. Your role is to take the project roadmap and create detailed, well-structured user stories and tasks that development teams can immediately work on, formatted as GitHub issues.
 
 Given input: [Project roadmap from Phase 2]
 
@@ -149,28 +153,21 @@ Follow these steps for each feature set / epic in the roadmap:
 4. Assign a unique identifier to each user story and task.
 
 Output format:
-For each feature set / epic:
+Generate a JSON array of issues, where each issue represents a user story or a task. The JSON structure should be as follows:
 
-Epic: [Epic Name]
-Description: [Brief description of the epic]
-
-User Story: [US-001]
-As a [user type], I want [goal] so that [benefit].
-Story Points: [Fibonacci number]
-Acceptance Criteria:
-1. [Criterion 1]
-2. [Criterion 2]
-3. [Criterion 3]
-
-Tasks:
-- [TASK-001] [Task description]
-- [TASK-002] [Task description]
-- [TASK-003] [Task description]
-
-Dependencies:
-- [List any dependencies, if applicable]
-
-[Repeat for each user story in the epic]
+{
+  "issues": [
+    {
+      "title": "US-001: As a [user type], I want [goal]",
+      "body": "User Story: As a [user type], I want [goal] so that [benefit].\n\nStory Points: [Fibonacci number]\n\nAcceptance Criteria:\n1. [Criterion 1]\n2. [Criterion 2]\n3. [Criterion 3]\n\nTasks:\n- TASK-001: [Task description]\n- TASK-002: [Task description]\n- TASK-003: [Task description]\n\nDependencies:\n- [List any dependencies, if applicable]\n\nEpic: [Epic Name]\nEpic Description: [Brief description of the epic]"
+    },
+    {
+      "title": "TASK-001: [Task description]",
+      "body": "Parent User Story: US-001\n\nDescription: [Detailed task description]\n\nAcceptance Criteria:\n1. [Specific criterion for this task]\n2. [Another criterion if applicable]\n\nEstimated effort: [X] hours\n\nNotes:\n- [Any additional information or technical considerations]"
+    },
+    // ... more issues for other user stories and tasks
+  ]
+}
 
 Additional guidelines:
 - Ensure each user story is independent, negotiable, valuable, estimable, small, and testable (INVEST criteria).
@@ -178,7 +175,10 @@ Additional guidelines:
 - Break down tasks into technical steps that developers can understand and implement.
 - Consider including tasks for testing, documentation, and any necessary DevOps work.
 - Highlight any potential technical challenges or areas that may require spike solutions.
-FORMAT: JSON
+- Use Markdown formatting in the "body" field for better readability on GitHub.
+- Include labels or other metadata as needed within each issue object.
+
+Remember to maintain traceability between epics, user stories, and tasks by referencing parent items in child issues. If any part of the roadmap is unclear or seems unfeasible to break down, note it for further clarification from the user or previous phase assistants.
     '''
     prompt = f"{assistant} Given this project roadmap: {roadmap}\nGenerate a list of tasks with story points and acceptance criteria."
     result = call_claude_api(prompt)
@@ -186,7 +186,21 @@ FORMAT: JSON
 
 @app.route("/")
 def home():
-    return "Hello, this is the Agile Chain interface!"
+    return "Hello, this is the Claude API interface!"
+
+@app.route("/generate", methods=["POST"])
+def github():
+    data = request.json
+    issues = data.get("issues")
+    auth = Auth.Login(username, password)
+    g = Github(auth=auth)
+
+    repo = g.get_repo("bhaviktest/demo")
+    for issue in issues:
+        title = issue.get("title")
+        body = issue.get("body")
+        repo.create_issue(title=title, body=body)
+    return jsonify({"message": "Issues created successfully!"})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
