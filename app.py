@@ -186,7 +186,7 @@ FORMAT: JSON
 
 @app.route("/")
 def home():
-    return "Hello, this is the Claude API interface!"
+    return "Hello, this is the Agile Chain interface!"
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
