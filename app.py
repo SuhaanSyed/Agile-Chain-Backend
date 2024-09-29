@@ -8,8 +8,7 @@ import os
 dotenv.load_dotenv()
 app = Flask(__name__)
 api_key = os.getenv("ANTHROPIC_API_KEY")
-username = os.getenv("GITHUB_USERNAME")
-password = os.getenv("GITHUB_PASSWORD")
+token = os.getenv("GITHUB_TOKEN")
 
 client = anthropic.Anthropic(
     api_key=api_key,
@@ -186,13 +185,13 @@ Remember to maintain traceability between epics, user stories, and tasks by refe
 
 @app.route("/")
 def home():
-    return "Hello, This is Agile Chain Interface!"
+    return "Hello, this is the Claude API interface!"
 
 @app.route("/generate", methods=["POST"])
 def github():
     data = request.json
     issues = data.get("issues")
-    auth = Auth.Login(username, password)
+    auth = Auth.Token(token)
     g = Github(auth=auth)
 
     repo = g.get_repo("bhaviktest/demo")
