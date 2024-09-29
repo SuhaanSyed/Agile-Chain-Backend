@@ -186,7 +186,7 @@ Remember to maintain traceability between epics, user stories, and tasks by refe
 
 @app.route("/")
 def home():
-    return "Hello, this is the Claude API interface!"
+    return "Hello, This is Agile Chain Interface!"
 
 @app.route("/generate", methods=["POST"])
 def github():
